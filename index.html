@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jeu d'échecs</title>
+  <style>
+    /* ── Reset et base ───────────────────────────── */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: sans-serif;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    h1 {
+      color: #569cd6;
+      font-size: 1.6rem;
+      margin-bottom: 8px;
+    }
+
+    p.subtitle {
+      color: #9cdcfe;
+      font-size: 0.9rem;
+      margin-bottom: 24px;
+    }
+
+    /* ── Conteneur du plateau ────────────────────── */
+    #board-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* ── Le plateau (grille CSS 8×8) ─────────────── */
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr); /* 8 colonnes de largeur égale */
+      width: 480px;
+      height: 480px;
+      border: 3px solid #3c3c3c;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    /* ── Responsive : mobile (< 480px) ──────────── */
+    @media (max-width: 480px) {
+      #board {
+        width: 96vw;
+        height: 96vw; /* carré : même valeur que la largeur */
+      }
+    }
+
+    /* ── Chaque case ─────────────────────────────── */
+    .square {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      aspect-ratio: 1 / 1; /* force le ratio carré */
+    }
+
+    /* Couleurs du damier */
+    .square--light { background-color: #f0d9b5; } /* beige clair */
+    .square--dark  { background-color: #b58863; } /* marron      */
+
+    /* ── Symbole de pièce ────────────────────────── */
+    .piece {
+      font-size: 2.6rem;      /* taille relative, s'adapte avec le plateau */
+      line-height: 1;
+      user-select: none;       /* empêche la sélection du texte au clic     */
+      cursor: default;
+    }
+
+    /* Pièces blanches : texte blanc + ombre sombre pour lisibilité */
+    .piece--white {
+      color: #ffffff;
+      text-shadow:
+        0 0 3px #000,
+        0 0 3px #000;
+    }
+
+    /* Pièces noires : texte noir + ombre claire pour lisibilité */
+    .piece--black {
+      color: #1a1a1a;
+      text-shadow:
+        0 0 3px #d4b483,
+        0 0 3px #d4b483;
+    }
+
+    /* ── Surbrillances ───────────────────────────── */
+
+    /* Case de la pièce sélectionnée : halo jaune-vert */
+    .square--selected {
+      box-shadow: inset 0 0 0 4px #f6f669;
+    }
+
+    /* Case vide accessible : point vert centré */
+    .square--highlight::after {
+      content: '';
+      display: block;
+      width: 34%;
+      height: 34%;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.18);
+      margin: auto;
+    }
+
+    /* Case avec pièce ennemie capturable : anneau rouge */
+    .square--capture {
+      box-shadow: inset 0 0 0 4px rgba(200, 50, 50, 0.75);
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* ── MENU D'ACCUEIL ──────────────────────────────────────────── */
+    /* ══════════════════════════════════════════════════════════════ */
+
+    /* Conteneur principal du menu */
+    #view-menu {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      max-width: 480px;
+      width: 100%;
+    }
+
+    /* Conteneur du plateau de jeu */
+    #view-game {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      width: 100%;
+    }
+
+    /* Liste des modes de jeu */
+    .mode-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+    }
+
+    /* ── Bouton de mode (base commune) ─────────────────────────── */
+    .mode-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 20px 24px;
+      min-height: 120px;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #2a2a2a;
+      color: #d4d4d4;
+    }
+
+    /* ── Bouton actif (Joueur vs Joueur local) ───────────────────── */
+    .mode-btn--active {
+      background: #569cd6;
+      color: #fff;
+      border-color: #4a8bc2;
+    }
+
+    .mode-btn--active:hover {
+      background: #4a8bc2;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(86, 156, 214, 0.3);
+    }
+
+    .mode-btn--active:active {
+      transform: translateY(0);
+    }
+
+    /* ── Bouton désactivé (En ligne, IA) ──────────────────────────── */
+    .mode-btn--disabled {
+      background: #3c3c3c;
+      color: #666;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* ── Icône du mode ───────────────────────────────────────────── */
+    .mode-icon {
+      font-size: 2.4rem;
+      line-height: 1;
+    }
+
+    /* ── Label principal ─────────────────────────────────────────── */
+    .mode-label {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    /* ── Description secondaire ──────────────────────────────────── */
+    .mode-desc {
+      font-size: 0.85rem;
+      opacity: 0.8;
+    }
+
+    /* ── Badge "Bientôt disponible" ──────────────────────────────── */
+    .mode-badge {
+      margin-top: 8px;
+      padding: 4px 12px;
+      background: rgba(255, 193, 7, 0.2);
+      color: #ffc107;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Bouton retour au menu ───────────────────────────────────── */
+    .back-btn {
+      margin-top: 24px;
+      padding: 12px 24px;
+      background: #3c3c3c;
+      color: #d4d4d4;
+      border: 1px solid #555;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .back-btn:hover {
+      background: #4a4a4a;
+      border-color: #666;
+    }
+
+    .back-btn:active {
+      background: #333;
+    }
+
+    /* ── Responsive mobile ───────────────────────────────────────── */
+    @media (max-width: 480px) {
+      .mode-btn {
+        min-height: 100px;
+        padding: 16px 20px;
+      }
+
+      .mode-icon {
+        font-size: 2rem;
+      }
+
+      .mode-label {
+        font-size: 1rem;
+      }
+
+      .mode-desc {
+        font-size: 0.8rem;
+      }
+    }
+
+    /* ══════════════════════════════════════════════════════════════ */
+    /* ── INTERFACE DE PARTIE ─────────────────────────────────────── */
+    /* ══════════════════════════════════════════════════════════════ */
+
+    /* Zone d'information (indicateur de tour, fin de partie) */
+    #game-info {
+      margin-top: 16px;
+      text-align: center;
+      font-size: 1.1rem;
+      min-height: 2rem; /* évite le saut de mise en page quand le texte change */
+    }
+
+    /* États de la partie */
+    .status--playing   { color: #d4d4d4; }
+    .status--check     { color: #ce9178; font-weight: bold; }
+    .status--checkmate { color: #4ec9b0; font-weight: bold; font-size: 1.2rem; }
+    .status--stalemate { color: #dcdcaa; font-weight: bold; }
+    .status--ai-thinking { color: #9cdcfe; font-style: italic; }
+
+    /* Bouton nouvelle partie (overlay en fin de partie) */
+    #btn-new-game {
+      display: none; /* Caché par défaut */
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+      padding: 16px 32px;
+      min-height: 56px;
+      background: #569cd6;
+      color: #ffffff;
+      border: 2px solid #4a8bc2;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      font-family: inherit;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      transition: all 0.2s ease;
+    }
+
+    #btn-new-game:hover {
+      background: #4a8bc2;
+      transform: translate(-50%, -50%) scale(1.05);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+    }
+
+    #btn-new-game:active {
+      transform: translate(-50%, -50%) scale(0.98);
+    }
+
+    /* Overlay semi-transparent derrière le bouton (optionnel) */
+    #btn-new-game::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: -1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- VUE 1 : Menu d'accueil (visible au démarrage)                   -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div id="view-menu">
+    <h1>♟ Jeu d'Échecs</h1>
+    <p class="subtitle">Choisissez votre mode de jeu</p>
+
+    <div class="mode-list">
+      <!-- Bouton actif : Joueur vs Joueur (Local) -->
+      <button id="btn-local" class="mode-btn mode-btn--active">
+        <span class="mode-icon">👥</span>
+        <span class="mode-label">Joueur vs Joueur</span>
+        <span class="mode-desc">Même appareil</span>
+      </button>
+
+      <!-- Bouton désactivé : Joueur vs Joueur (En ligne) -->
+      <button class="mode-btn mode-btn--disabled" disabled>
+        <span class="mode-icon">🌐</span>
+        <span class="mode-label">Joueur vs Joueur</span>
+        <span class="mode-desc">En ligne</span>
+        <span class="mode-badge">Bientôt disponible</span>
+      </button>
+
+      <!-- Bouton actif : Contre l'IA -->
+      <button id="btn-ai" class="mode-btn mode-btn--active">
+        <span class="mode-icon">🤖</span>
+        <span class="mode-label">Contre l'IA</span>
+        <span class="mode-desc">Joueur solo</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- VUE 2 : Plateau de jeu (caché au démarrage)                     -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div id="view-game" style="display: none;">
+    <h1>Jeu d'échecs</h1>
+    <p class="subtitle">Joueur vs Joueur (Local)</p>
+
+    <div id="board-container">
+      <div id="board"></div>
+    </div>
+
+    <!-- Zone d'information de partie -->
+    <div id="game-info">
+      <p id="turn-indicator">⬜ Blancs jouent</p>
+    </div>
+
+    <!-- Bouton nouvelle partie (caché par défaut, affiché en overlay en fin de partie) -->
+    <button id="btn-new-game" style="display: none;">🔄 Nouvelle partie</button>
+
+    <!-- Bouton retour au menu -->
+    <button id="btn-back-menu" class="back-btn">← Menu</button>
+  </div>
+
+  <!-- Ordre de chargement important :
+       board.js définit createBoard() et squareToIndex()
+       pieces.js utilise squareToIndex() → doit venir après board.js
+       moves.js  utilise board[] et les pièces → doit venir après pieces.js
+       renderer.js utilise board[] → doit venir après les deux autres
+       menu.js gère la navigation entre les vues → doit venir avant game.js
+       ai.js    définit getBestMove() → doit venir avant game.js
+       game.js  utilise tout ce qui précède → doit être chargé en dernier -->
+  <script src="js/board.js"></script>
+  <script src="js/pieces.js"></script>
+  <script src="js/moves.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/menu.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/game.js"></script>
+
+</body>
+</html>
